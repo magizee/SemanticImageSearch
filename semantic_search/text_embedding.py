@@ -73,16 +73,19 @@ def make_idf_mapping(idf: List[float], vocab:List[str]) -> Dict[str, float]:
     return {v:i for v, i in zip(vocab, idf)}
 
 def get_glove(word: str):
-    return glove[word]
+    """Returns word's GloVe embedding, or a zero vector if word is OOV for GloVe."""
+    if word in glove:
+        return glove[word]
+    return np.zeros(glove.vector_size)
 
 def make_caption_descriptor(caption: str, idf_map: Dict[str, float]):
-    token = np.array(to_token(caption))
-    d = np.ones(200,)
-    for t in token:
-        if t not in list(idf_map.keys()):
-            d += 0
-        else: 
-            d += (idf_map[t]*get_glove(t))
-    #d = sum(idf_map[t]*get_glove(t) for t in token)
-    d /= np.linalg.norm(d)
+    d = np.zeros(glove.vector_size)
+    for t in to_token(caption):
+        if t in idf_map:
+            d += idf_map[t] * get_glove(t)
+    # words absent from idf_map/GloVe leave d untouched; guard against
+    # normalizing an all-zero vector (caption with no known words)
+    norm = np.linalg.norm(d)
+    if norm > 0:
+        d /= norm
     return d
