@@ -5,8 +5,8 @@ import warnings
 from pathlib import Path
 from typing import List, Optional
 
+import httpx
 import numpy as np
-import requests
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -46,6 +46,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# a shared, connection-pooled async client for /image-proxy -- reusing
+# connections to images.cocodataset.org (and not blocking a worker thread
+# per request, unlike the sync `requests` library) noticeably cuts down
+# search-to-images-visible latency when loading many images at once
+_http_client = httpx.AsyncClient(timeout=10.0)
 
 # --- load everything once at startup (all small/fast thanks to the
 # trimmed query_vectors cache -- no gensim/full GloVe needed here) ---
@@ -117,7 +123,7 @@ def health():
 
 
 @app.get("/image-proxy")
-def image_proxy(url: str):
+async def image_proxy(url: str):
     # COCO's image host is http-only; a browser on the https-served
     # frontend can silently fail to load http <img> resources (mixed
     # content), so we fetch server-side and re-serve from our own
@@ -125,8 +131,11 @@ def image_proxy(url: str):
     if not url.startswith(ALLOWED_IMAGE_URL_PREFIXES):
         raise HTTPException(status_code=400, detail="URL not allowed")
 
-    upstream = requests.get(url, timeout=10)
-    upstream.raise_for_status()
+    try:
+        upstream = await _http_client.get(url)
+        upstream.raise_for_status()
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="Failed to fetch upstream image")
     return Response(
         content=upstream.content,
         media_type=upstream.headers.get("Content-Type", "image/jpeg"),
