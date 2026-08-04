@@ -67,6 +67,11 @@ class SearchResult(BaseModel):
     score: float
 
 
+@app.get("/")
+def root():
+    return {"service": "Semantic Image Search API", "docs": "/docs", "health": "/health"}
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "num_images": len(_image_ids)}
