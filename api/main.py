@@ -1,5 +1,6 @@
 import os
 import pickle
+import random
 import warnings
 from pathlib import Path
 from typing import List, Optional
@@ -11,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from mygrad import Tensor
 
-from semantic_search.text_embedding import embed_query_from_cache
+from semantic_search.text_embedding import embed_query_from_cache, to_token
 from semantic_search.image_model import ImageDescriptors, load_model
 from semantic_search.database import Database
 
@@ -63,6 +64,31 @@ _db.image_embeddings = _db.load_image_database(str(DATA_DIR / "database.pkl"))
 _image_ids = list(_db.image_embeddings.keys())
 _embedding_matrix = np.array(list(_db.image_embeddings.values()))
 
+# precomputed once for nearest-word lookups (see nearest_words below)
+_vocab_words = list(query_vectors.keys())
+_vocab_vectors = np.stack([query_vectors[w] for w in _vocab_words])
+_vocab_norms = np.linalg.norm(_vocab_vectors, axis=1)
+
+
+def nearest_words(query_vec: np.ndarray, top_k: int = 24, exclude=frozenset()) -> List[str]:
+    """Finds the vocab words whose GloVe vectors are most similar (by cosine
+    similarity) to query_vec -- a lightweight way to surface what the
+    embedding space "thinks" is near a query, for decorative display.
+    """
+    query_norm = np.linalg.norm(query_vec)
+    if query_norm == 0:
+        return []
+    sims = (_vocab_vectors @ query_vec) / (_vocab_norms * query_norm)
+    order = np.argsort(sims)[::-1]
+    words = []
+    for idx in order:
+        word = _vocab_words[idx]
+        if word not in exclude:
+            words.append(word)
+        if len(words) >= top_k:
+            break
+    return words
+
 
 class SearchRequest(BaseModel):
     query: str
@@ -73,6 +99,11 @@ class SearchResult(BaseModel):
     image_url: Optional[str]
     caption: Optional[str]
     score: float
+
+
+class SearchResponse(BaseModel):
+    results: List[SearchResult]
+    similar_words: List[str]
 
 
 @app.get("/")
@@ -103,7 +134,21 @@ def image_proxy(url: str):
     )
 
 
-@app.post("/search", response_model=List[SearchResult])
+@app.get("/random", response_model=List[SearchResult])
+def random_images(count: int = 16):
+    count = max(1, min(count, len(_image_ids)))
+    results = []
+    for image_id in random.sample(_image_ids, count):
+        meta = image_metadata.get(image_id, {})
+        results.append(SearchResult(
+            image_url=meta.get("url"),
+            caption=meta.get("caption"),
+            score=0.0,
+        ))
+    return results
+
+
+@app.post("/search", response_model=SearchResponse)
 def search(req: SearchRequest):
     query_vec = embed_query_from_cache(req.query, query_vectors, idf_map)
     caption_emb = model.caption_embed(Tensor(query_vec.reshape(1, -1))).data.reshape(-1)
@@ -121,4 +166,8 @@ def search(req: SearchRequest):
             caption=meta.get("caption"),
             score=float(sims[idx]),
         ))
-    return results
+
+    query_tokens = set(to_token(req.query))
+    similar_words = nearest_words(query_vec, top_k=24, exclude=query_tokens)
+
+    return SearchResponse(results=results, similar_words=similar_words)
