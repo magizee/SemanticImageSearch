@@ -5,7 +5,8 @@ from pathlib import Path
 from typing import List, Optional
 
 import numpy as np
-from fastapi import FastAPI
+import requests
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from mygrad import Tensor
@@ -28,6 +29,13 @@ IMAGE_DIM = 512
 EMBEDDING_DIM = 128
 
 FRONTEND_ORIGIN = os.environ.get("FRONTEND_ORIGIN", "*")
+
+# only these prefixes may be fetched by /image-proxy -- without this
+# allowlist, a URL-fetching proxy is an open SSRF vector
+ALLOWED_IMAGE_URL_PREFIXES = (
+    "http://images.cocodataset.org/",
+    "https://images.cocodataset.org/",
+)
 
 app = FastAPI(title="Semantic Image Search API")
 
@@ -75,6 +83,24 @@ def root():
 @app.get("/health")
 def health():
     return {"status": "ok", "num_images": len(_image_ids)}
+
+
+@app.get("/image-proxy")
+def image_proxy(url: str):
+    # COCO's image host is http-only; a browser on the https-served
+    # frontend can silently fail to load http <img> resources (mixed
+    # content), so we fetch server-side and re-serve from our own
+    # https origin instead.
+    if not url.startswith(ALLOWED_IMAGE_URL_PREFIXES):
+        raise HTTPException(status_code=400, detail="URL not allowed")
+
+    upstream = requests.get(url, timeout=10)
+    upstream.raise_for_status()
+    return Response(
+        content=upstream.content,
+        media_type=upstream.headers.get("Content-Type", "image/jpeg"),
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 
 @app.post("/search", response_model=List[SearchResult])

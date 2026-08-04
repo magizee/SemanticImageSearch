@@ -3,6 +3,11 @@ import './App.css'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
 
+// COCO's image host is http-only, which browsers can silently fail to load
+// as mixed content on our https-served frontend -- route through the
+// backend's /image-proxy so images come from our own https origin instead.
+const proxiedImageUrl = (url) => url ? `${API_URL}/image-proxy?url=${encodeURIComponent(url)}` : url
+
 function App() {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
@@ -86,7 +91,7 @@ function App() {
           <div className="grid">
             {results.map((result, i) => (
               <figure className="card" key={result.image_url ?? i}>
-                <img src={result.image_url} alt={result.caption ?? 'search result'} loading="lazy" />
+                <img src={proxiedImageUrl(result.image_url)} alt={result.caption ?? 'search result'} loading="lazy" />
                 <figcaption>{result.caption}</figcaption>
               </figure>
             ))}
