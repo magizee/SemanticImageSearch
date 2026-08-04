@@ -21,24 +21,78 @@ const shuffle = (arr) => {
 
 const GRAY_SHADES = ['#0a0a0a', '#2b2b2b', '#4a4a4a', '#6b6b6b', '#8a8a8a']
 
-// scatters similar_words around the logo with randomized size/position/shade
-const buildWordCloud = (words) => words.map((text) => ({
-  text,
-  style: {
-    left: `${5 + Math.random() * 90}%`,
-    top: `${Math.random() * 100}%`,
-    fontSize: `${11 + Math.random() * 24}px`,
-    color: GRAY_SHADES[Math.floor(Math.random() * GRAY_SHADES.length)],
-    transform: `translate(-50%, -50%) rotate(${(Math.random() - 0.5) * 16}deg)`,
-    animationDelay: `${Math.random() * 400}ms`,
-  },
-}))
+// virtual layout canvas (percent-independent units) the packing algorithm
+// works in; final positions are converted to percentages of this box
+const CLOUD_W = 760
+const CLOUD_H = 320
+
+// packs similar_words around the logo, wordle-style: each word placed at a
+// random horizontal or vertical orientation, spiraling outward from center
+// until it finds a spot that doesn't overlap an already-placed word
+const buildWordCloud = (words) => {
+  if (words.length === 0) return []
+
+  const n = words.length
+  const items = words.map((text, i) => {
+    const rank = 1 - i / Math.max(1, n - 1) // 1 = most similar .. 0 = least
+    const fontSize = 13 + rank * 27
+    const vertical = Math.random() < 0.35
+    const charW = fontSize * 0.6
+    const textW = text.length * charW + 8
+    const textH = fontSize * 1.2
+    return {
+      text,
+      fontSize,
+      vertical,
+      w: vertical ? textH : textW,
+      h: vertical ? textW : textH,
+      color: GRAY_SHADES[Math.floor(Math.random() * GRAY_SHADES.length)],
+    }
+  })
+
+  const placed = []
+  const centerX = CLOUD_W / 2
+  const centerY = CLOUD_H / 2
+  const overlaps = (x, y, w, h) => placed.some((p) => (
+    x < p.x + p.w + 4 && x + w + 4 > p.x &&
+    y < p.y + p.h + 4 && y + h + 4 > p.y
+  ))
+
+  items.forEach((item) => {
+    let x = centerX - item.w / 2
+    let y = centerY - item.h / 2
+    let angle = Math.random() * Math.PI * 2
+    let radius = 0
+    let attempts = 0
+    while (overlaps(x, y, item.w, item.h) && attempts < 500) {
+      angle += 0.45
+      radius += 1.6
+      x = centerX + radius * Math.cos(angle) - item.w / 2
+      y = centerY + radius * Math.sin(angle) * 0.6 - item.h / 2
+      attempts++
+    }
+    placed.push({ ...item, x, y })
+  })
+
+  return placed.map((p, i) => ({
+    text: p.text,
+    style: {
+      left: `${((p.x + p.w / 2) / CLOUD_W) * 100}%`,
+      top: `${((p.y + p.h / 2) / CLOUD_H) * 100}%`,
+      fontSize: `${p.fontSize}px`,
+      color: p.color,
+      transform: `translate(-50%, -50%) rotate(${p.vertical ? -90 : 0}deg)`,
+      animationDelay: `${(i / placed.length) * 350}ms`,
+    },
+  }))
+}
 
 function App() {
   const [query, setQuery] = useState('')
   const [slots, setSlots] = useState([]) // [{ key, faceA, faceB, flipped }]
   const [wordCloud, setWordCloud] = useState([])
   const [isSearching, setIsSearching] = useState(false)
+  const [hasSearched, setHasSearched] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const requestId = useRef(0)
   const timeouts = useRef([])
@@ -62,6 +116,7 @@ function App() {
     timeouts.current.forEach(clearTimeout)
     timeouts.current = []
     setIsSearching(true)
+    setHasSearched(true)
     setErrorMessage('')
 
     try {
@@ -121,7 +176,7 @@ function App() {
         </div>
         <header className="hero">
           <h1>Semantic<br />Image Search</h1>
-          <p className="subtitle">start by searching for an image</p>
+          {!hasSearched && <p className="subtitle">start by searching for an image</p>}
         </header>
       </div>
 
@@ -145,28 +200,24 @@ function App() {
 
         {slots.length > 0 && (
           <div className="grid">
-            {slots.map((slot) => {
-              const shownCaption = (slot.flipped ? slot.faceB : slot.faceA)?.caption
-              return (
-                <figure className="card" key={slot.key}>
-                  <div className="flip-card">
-                    <div className={`flip-inner ${slot.flipped ? 'is-flipped' : ''}`}>
-                      <div className="flip-face flip-front">
-                        {slot.faceA && (
-                          <img src={proxiedImageUrl(slot.faceA.image_url)} alt="" loading="lazy" />
-                        )}
-                      </div>
-                      <div className="flip-face flip-back">
-                        {slot.faceB && (
-                          <img src={proxiedImageUrl(slot.faceB.image_url)} alt="" loading="lazy" />
-                        )}
-                      </div>
+            {slots.map((slot) => (
+              <div className="card" key={slot.key}>
+                <div className="flip-card">
+                  <div className={`flip-inner ${slot.flipped ? 'is-flipped' : ''}`}>
+                    <div className="flip-face flip-front">
+                      {slot.faceA && (
+                        <img src={proxiedImageUrl(slot.faceA.image_url)} alt={slot.faceA.caption ?? ''} loading="lazy" />
+                      )}
+                    </div>
+                    <div className="flip-face flip-back">
+                      {slot.faceB && (
+                        <img src={proxiedImageUrl(slot.faceB.image_url)} alt={slot.faceB.caption ?? ''} loading="lazy" />
+                      )}
                     </div>
                   </div>
-                  <figcaption>{shownCaption}</figcaption>
-                </figure>
-              )
-            })}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </main>

@@ -190,16 +190,6 @@
   transform: rotateY(180deg);
 }
 
-.card figcaption {
-  padding: 8px 10px;
-  font-size: 11px;
-  font-family: var(--mono);
-  color: var(--text);
-  line-height: 1.35;
-  border-top: 1px solid var(--border-soft);
-  min-height: 2.7em;
-}
-
 @media (max-width: 640px) {
   .page {
     padding: 40px 16px 32px;
