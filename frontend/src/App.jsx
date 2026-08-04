@@ -53,10 +53,16 @@ const buildWordCloud = (words) => {
   const placed = []
   const centerX = CLOUD_W / 2
   const centerY = CLOUD_H / 2
+  const MARGIN = 6
   const overlaps = (x, y, w, h) => placed.some((p) => (
     x < p.x + p.w + 4 && x + w + 4 > p.x &&
     y < p.y + p.h + 4 && y + h + 4 > p.y
   ))
+  // keeps words within the canvas so they can't drift down into the
+  // search bar (or sideways/up past the hero area) while spiraling out
+  const inBounds = (x, y, w, h) => (
+    x >= MARGIN && y >= MARGIN && x + w <= CLOUD_W - MARGIN && y + h <= CLOUD_H - MARGIN
+  )
 
   items.forEach((item) => {
     let x = centerX - item.w / 2
@@ -64,13 +70,17 @@ const buildWordCloud = (words) => {
     let angle = Math.random() * Math.PI * 2
     let radius = 0
     let attempts = 0
-    while (overlaps(x, y, item.w, item.h) && attempts < 500) {
+    while ((!inBounds(x, y, item.w, item.h) || overlaps(x, y, item.w, item.h)) && attempts < 500) {
       angle += 0.45
       radius += 1.6
       x = centerX + radius * Math.cos(angle) - item.w / 2
       y = centerY + radius * Math.sin(angle) * 0.6 - item.h / 2
       attempts++
     }
+    // fallback: clamp inside the canvas even if a perfectly free spot
+    // was never found within the attempt budget
+    x = Math.min(Math.max(x, MARGIN), CLOUD_W - MARGIN - item.w)
+    y = Math.min(Math.max(y, MARGIN), CLOUD_H - MARGIN - item.h)
     placed.push({ ...item, x, y })
   })
 
