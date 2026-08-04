@@ -1,8 +1,4 @@
 import numpy as np
-import matplotlib.pyplot as plt
-from PIL import Image
-import requests
-from io import BytesIO
 import pickle
 from numpy.linalg import norm
 
@@ -18,7 +14,12 @@ class Database:
 
     # Function to download an image
     @staticmethod
-    def download_image(img_url: str) -> Image:
+    def download_image(img_url: str):
+        # imported lazily: requests/PIL are only needed for this
+        # notebook/plotting helper, not for embedding/search-serving use
+        import requests
+        from io import BytesIO
+        from PIL import Image
         response = requests.get(img_url)
         return Image.open(BytesIO(response.content))
 
@@ -71,6 +72,8 @@ class Database:
     # Step 4: Display Images
     @staticmethod
     def display_images(image_urls: list):
+        # imported lazily, same reasoning as download_image above
+        import matplotlib.pyplot as plt
         fig, axes = plt.subplots(1, len(image_urls), figsize=(15, 5))
         for ax, url in zip(axes, image_urls):
             img = Database.download_image(url)

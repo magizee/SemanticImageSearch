@@ -4,11 +4,22 @@ import itertools
 from collections import Counter
 import numpy as np
 
-# loading glove
-from cogworks_data.language import get_data_path
-from gensim.models import KeyedVectors
-filename = "glove.6B.200d.txt.w2v"
-glove = KeyedVectors.load_word2vec_format(get_data_path(filename), binary=False)
+GLOVE_DIM = 200
+
+_glove = None
+
+def _get_glove_model():
+    """Lazily loads the full ~660MB GloVe model on first use, so importing
+    this module (e.g. just for to_token/embed_query_from_cache) doesn't pay
+    that cost -- only callers that actually need get_glove/make_caption_descriptor do.
+    """
+    global _glove
+    if _glove is None:
+        from cogworks_data.language import get_data_path
+        from gensim.models import KeyedVectors
+        filename = "glove.6B.200d.txt.w2v"
+        _glove = KeyedVectors.load_word2vec_format(get_data_path(filename), binary=False)
+    return _glove
 
 #identifies all punction character
 punc_regex = re.compile('[{}]'.format(re.escape(string.punctuation)))
@@ -74,17 +85,33 @@ def make_idf_mapping(idf: List[float], vocab:List[str]) -> Dict[str, float]:
 
 def get_glove(word: str):
     """Returns word's GloVe embedding, or a zero vector if word is OOV for GloVe."""
+    glove = _get_glove_model()
     if word in glove:
         return glove[word]
     return np.zeros(glove.vector_size)
 
 def make_caption_descriptor(caption: str, idf_map: Dict[str, float]):
-    d = np.zeros(glove.vector_size)
+    d = np.zeros(GLOVE_DIM)
     for t in to_token(caption):
         if t in idf_map:
             d += idf_map[t] * get_glove(t)
     # words absent from idf_map/GloVe leave d untouched; guard against
     # normalizing an all-zero vector (caption with no known words)
+    norm = np.linalg.norm(d)
+    if norm > 0:
+        d /= norm
+    return d
+
+def embed_query_from_cache(text: str, query_vectors: Dict[str, np.ndarray], idf_map: Dict[str, float]):
+    """Same computation as make_caption_descriptor, but sourced from a
+    precomputed {word: GloVe vector} cache (see build_query_vectors.py)
+    instead of the full GloVe model -- for serving contexts where loading
+    ~660MB via gensim isn't worth the memory/startup cost.
+    """
+    d = np.zeros(GLOVE_DIM)
+    for t in to_token(text):
+        if t in idf_map and t in query_vectors:
+            d += idf_map[t] * query_vectors[t]
     norm = np.linalg.norm(d)
     if norm > 0:
         d /= norm

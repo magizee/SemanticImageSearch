@@ -1,4 +1,5 @@
 import numpy as np
+import mygrad as mg
 from mynn.layers.dense import dense
 from mygrad.nnet.initializers import glorot_normal
 from mygrad.nnet.losses import margin_ranking_loss
@@ -21,8 +22,8 @@ class ImageDescriptors:
         embedding_dimension : int
             The size of the embedded descriptor
         '''
-        self.caption_embed = dense(caption_dimension, embedding_dimension, weight_initializer = glorot_normal, bias = False)
-        self.image_embed = dense(image_dimension, embedding_dimension, weight_initializer = glorot_normal, bias = False)
+        self.caption_embed = dense(caption_dimension, embedding_dimension, weight_initializer = glorot_normal, bias = True)
+        self.image_embed = dense(image_dimension, embedding_dimension, weight_initializer = glorot_normal, bias = True)
 
     def __call__(self, caption, image):
         '''Passes data as input to our model, forword pass.
@@ -44,6 +45,7 @@ class ImageDescriptors:
         caption_emb = self.caption_embed(caption)
         image_emb = self.image_embed(image)
         return caption_emb, image_emb
+    @property
     def parameters(self):
         '''A convenience function for getting all the parameters of our model.
 
@@ -79,11 +81,24 @@ def compute_loss_and_accuracy(caption_emb, image_emb, confusor_emb):
     accuracy : float
         The fraction of correct pairs where the similarity score of the correct image is higher than that of the confusor image.
     '''
-    good_sim = (caption_emb @ image_emb.T)
-    bad_sim = (caption_emb @ confusor_emb.T)
+    # L2-normalize so similarity is cosine similarity, bounded to [-1, 1].
+    # Without this, raw dot-product similarity is unbounded: the model can
+    # inflate embedding norms to blow up the loss on remaining hard examples
+    # without improving ranking (accuracy is scale-invariant), which makes
+    # the fixed numeric margin meaningless and the loss diverge over training.
+    caption_emb = caption_emb / mg.sqrt((caption_emb ** 2).sum(axis=1, keepdims=True))
+    image_emb = image_emb / mg.sqrt((image_emb ** 2).sum(axis=1, keepdims=True))
+    confusor_emb = confusor_emb / mg.sqrt((confusor_emb ** 2).sum(axis=1, keepdims=True))
+
+    # per-example (paired) similarity: caption_emb[i] . image_emb[i], not the
+    # full (M, M) cross-batch similarity matrix that "@" would produce, which
+    # would compare each caption against every OTHER example's image/confusor
+    # too and swamp the real signal with irrelevant pairs
+    good_sim = (caption_emb * image_emb).sum(axis=1)
+    bad_sim = (caption_emb * confusor_emb).sum(axis=1)
 
     loss = margin_ranking_loss(x1 = good_sim, x2 = bad_sim, y = 1, margin = 0.25)
-    accuracy = np.mean(good_sim > bad_sim)
+    accuracy = np.mean(good_sim.data > bad_sim.data)
 
     return loss, accuracy
 
@@ -99,7 +114,7 @@ def save_model(model, file_path):
         Path for the model's weights will be saved
     '''
     with open(file_path, 'wb') as f:
-        pickle.dump({k: v.data for k, v in model.parameters.items()}, f)
+        pickle.dump([p.data for p in model.parameters], f)
 
 def load_model(model, file_path):
     '''Loads the model weights from a file.
@@ -115,5 +130,8 @@ def load_model(model, file_path):
     with open(file_path, 'rb') as f:
         weights = pickle.load(f)
 
-    for k, v in weights.items():
-        model.parameters[k].data = v
+    for param, w in zip(model.parameters, weights):
+        # np.array(..., copy=True) strips any leftover .base chain from
+        # unpickling (observed as a raw `bytes` base on some arrays), which
+        # mygrad's internals can't handle when the tensor re-enters a graph
+        param.data = np.array(w, copy=True)
