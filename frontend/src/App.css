@@ -25,10 +25,12 @@
   position: relative;
   width: 100%;
   max-width: 820px;
+  min-height: 380px;
   padding: 64px 20px;
   margin-bottom: 8px;
   display: flex;
   justify-content: center;
+  align-items: center;
 }
 
 .word-cloud {
