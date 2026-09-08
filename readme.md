@@ -1,6 +1,6 @@
 # Semantic Image Search
 
-Search 82,612 MS COCO images by meaning instead of keywords — type "grassy field" and get back images of grassy fields, rather than captions that contain grassy fields.
+Search 82,612 MS COCO images by meaning instead of keywords — type "grassy field" and get back images of grassy fields, rather than just images whose captions contain "grassy field."
 
 **Live demo:** https://semantic-image-search-pied.vercel.app 
 
