@@ -36,5 +36,3 @@ frontend/                  React + Vite frontend
 requirements.txt          data-pipeline / training dependencies
 api/requirements.txt      lean serving-only dependencies
 ```
-
-`SemanticImageSearchOverview_STUDENT.ipynb`, `makingCaptionVectors.ipynb`, and `profile.ipynb` are early exploratory notebooks, kept for reference.
