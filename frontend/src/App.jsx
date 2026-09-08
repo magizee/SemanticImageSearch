@@ -127,29 +127,21 @@ function App() {
               const shownResult = slot.flipped ? slot.faceB : slot.faceA
               return (
                 <div className="card" key={slot.key}>
-                  <div className="hover-flip">
-                    <div className="hover-flip-inner">
-                      <div className="hover-face hover-face-front">
-                        <div className="flip-card">
-                          <div className={`flip-inner ${slot.flipped ? 'is-flipped' : ''}`}>
-                            <div className="flip-face flip-front">
-                              {slot.faceA && (
-                                <img src={proxiedImageUrl(slot.faceA.image_url)} alt={slot.faceA.caption ?? ''} loading="lazy" />
-                              )}
-                            </div>
-                            <div className="flip-face flip-back">
-                              {slot.faceB && (
-                                <img src={proxiedImageUrl(slot.faceB.image_url)} alt={slot.faceB.caption ?? ''} loading="lazy" />
-                              )}
-                            </div>
-                          </div>
-                        </div>
+                  <div className="flip-card">
+                    <div className={`flip-inner ${slot.flipped ? 'is-flipped' : ''}`}>
+                      <div className="flip-face flip-front">
+                        {slot.faceA && (
+                          <img src={proxiedImageUrl(slot.faceA.image_url)} alt={slot.faceA.caption ?? ''} loading="lazy" />
+                        )}
                       </div>
-                      <div className="hover-face hover-face-back">
-                        <div className="caption-scrim">
-                          <p>{shownResult?.caption}</p>
-                        </div>
+                      <div className="flip-face flip-back">
+                        {slot.faceB && (
+                          <img src={proxiedImageUrl(slot.faceB.image_url)} alt={slot.faceB.caption ?? ''} loading="lazy" />
+                        )}
                       </div>
+                    </div>
+                    <div className="caption-scrim">
+                      <p>{shownResult?.caption}</p>
                     </div>
                   </div>
                 </div>

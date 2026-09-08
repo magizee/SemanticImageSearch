@@ -120,36 +120,10 @@
   background: var(--surface);
 }
 
-/* outer flip: hovering the card reveals its caption (rotateX), independent
-   of the inner search-driven image flip (rotateY) nested inside its front
-   face -- different axes so the two never visually fight each other */
-.hover-flip {
-  perspective: 1400px;
-}
-
-.hover-flip-inner {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  transform-style: preserve-3d;
-  transition: transform 0.5s ease;
-}
-
-.card:hover .hover-flip-inner {
-  transform: rotateX(180deg);
-}
-
-.hover-face {
-  position: absolute;
-  inset: 0;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-}
-
-.hover-face-back {
-  transform: rotateX(180deg);
-}
-
+/* caption reveal: a plain opacity fade on hover, layered above the image
+   flip below rather than its own 3D transform -- avoids nesting a second
+   3D context inside the search-driven flip, which was causing a visible
+   flicker when both animated together */
 .caption-scrim {
   position: absolute;
   inset: 0;
@@ -158,6 +132,13 @@
   align-items: center;
   justify-content: center;
   padding: 14px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+
+.card:hover .caption-scrim {
+  opacity: 1;
 }
 
 .caption-scrim p {
@@ -170,7 +151,9 @@
 }
 
 .flip-card {
+  position: relative;
   perspective: 1200px;
+  -webkit-perspective: 1200px;
   width: 100%;
   height: 100%;
 }
@@ -181,6 +164,8 @@
   height: 100%;
   transition: transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1);
   transform-style: preserve-3d;
+  -webkit-transform-style: preserve-3d;
+  will-change: transform;
 }
 
 .flip-inner.is-flipped {
@@ -194,6 +179,7 @@
   -webkit-backface-visibility: hidden;
   overflow: hidden;
   background: var(--border-soft);
+  transform: translateZ(0);
 }
 
 .flip-face img {
@@ -204,7 +190,7 @@
 }
 
 .flip-back {
-  transform: rotateY(180deg);
+  transform: rotateY(180deg) translateZ(0);
 }
 
 @media (max-width: 640px) {
