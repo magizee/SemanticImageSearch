@@ -1,8 +1,8 @@
 # Semantic Image Search
 
-Search 82,612 MS COCO images by meaning instead of keywords — type "a dog running on the beach" and get back images whose *content* matches, not just images whose captions happen to contain those words.
+Search 82,612 MS COCO images by meaning instead of keywords — type "grassy field" and get back images of grassy fields, rather than captions that contain grassy fields.
 
-**Live demo:** backend at [semanticimagesearch.onrender.com](https://semanticimagesearch.onrender.com) (Render free tier — cold-starts after ~15 min idle, first request can take 30-60s). Frontend is deployed on Vercel.
+**Live demo:** https://semantic-image-search-pied.vercel.app 
 
 ## How it works
 
@@ -10,28 +10,12 @@ Captions and images are mapped into a shared 128-dimensional embedding space, so
 
 **Text → vector.** A caption or query is tokenized, then embedded as an IDF-weighted average of its words' [GloVe-200](https://nlp.stanford.edu/projects/glove/) vectors, L2-normalized. IDF weights are computed once over the ~413K-caption COCO corpus (`semantic_search/text_embedding.py`, cached in `data/idf_map.pkl`).
 
-**Image → vector.** Each image already has a 512-dim descriptor from a pretrained ResNet-18 (provided by the dataset). No image processing happens at query time — everything downstream is fast, precomputed dense math.
+**Image → vector.** Each image already has a 512-dim descriptor from a pretrained ResNet-18 (provided by the dataset). No image processing happens at query time.
 
 **Joint embedding model.** Two independent dense layers — `caption_embed: 200→128` and `image_embed: 512→128` — project captions and images into the same space (`semantic_search/image_model.py`). Trained with margin ranking loss on (caption, true image, random confusor image) triples: 500 epochs over all 413,258 COCO captions, reaching 98.96% pairwise-ranking accuracy (`train.py`). Known limitation: training uses *random* negatives, which is an easier task than real top-k retrieval against all 82K images — replacing it with in-batch negatives (treating every other example in a batch as an additional negative) is the natural next step for search-quality improvement.
 
 **Search.** `build_database.py` runs every image's descriptor through the trained `image_embed` layer once, offline, and stores the resulting 82,612 embeddings (`data/database.pkl`). At request time the API just embeds the query text, runs it through `caption_embed`, and does a cosine-similarity scan against that precomputed matrix (`semantic_search/database.py`) — no model inference over images ever happens live.
 
-## Serving
-
-The FastAPI backend (`api/main.py`) is deliberately lean: it never imports `gensim` or loads the full 660MB GloVe file. Instead it loads a ~17MB cache of just the GloVe vectors for words that actually appear in the COCO vocabulary (`data/query_vectors.pkl`) — safe because any word outside that vocabulary already contributes zero weight to the embedding.
-
-COCO's image host (`images.cocodataset.org`) is HTTP-only, which browsers treat as mixed content on the HTTPS-served frontend. `/image-proxy` re-fetches each image server-side (a pooled `httpx.AsyncClient`) and re-serves it from the API's own HTTPS origin.
-
-| Endpoint | Purpose |
-|---|---|
-| `POST /search` | Embed a query, return top-k images by cosine similarity + nearest GloVe-space words |
-| `GET /random` | N random images, for the idle-state grid |
-| `GET /image-proxy` | HTTPS relay for an allowlisted COCO image URL |
-| `GET /health` | Liveness check |
-
-## Frontend
-
-React 19 + Vite, plain CSS (no framework) — a grayscale, square-grid, editorial look. The result grid loads a random set of images on page load; submitting a search flips each card over (a real CSS 3D transform) to its new image at its own randomized moment rather than swapping everything at once. Hovering a card fades in its MS COCO caption over a dark scrim.
 
 ## Project structure
 
