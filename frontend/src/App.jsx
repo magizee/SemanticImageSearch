@@ -5,10 +5,18 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
 const RESULT_COUNT = 16
 const FLIP_WINDOW_MS = 700 // total span over which the 16 cards flip, in random order
 
-// COCO's image host is http-only, which browsers can silently fail to load
-// as mixed content on our https-served frontend -- route through the
-// backend's /image-proxy so images come from our own https origin instead.
+// COCO's image host is http-only; loading it directly from our https-served
+// frontend is mixed content, which some browsers silently refuse. We load
+// directly by default (fast: straight from COCO's CDN, no backend relay)
+// and only fall back to routing through the backend's /image-proxy (which
+// re-serves it from our own https origin) if the direct load actually fails.
 const proxiedImageUrl = (url) => url ? `${API_URL}/image-proxy?url=${encodeURIComponent(url)}` : url
+const handleImageError = (e) => {
+  const proxied = proxiedImageUrl(e.target.dataset.src)
+  if (e.target.src !== proxied) {
+    e.target.src = proxied
+  }
+}
 
 const shuffle = (arr) => {
   const a = [...arr]
@@ -23,6 +31,7 @@ function App() {
   const [query, setQuery] = useState('')
   const [slots, setSlots] = useState([]) // [{ key, faceA, faceB, flipped }]
   const [isSearching, setIsSearching] = useState(false)
+  const [isInitialLoading, setIsInitialLoading] = useState(true)
   const [hasSearched, setHasSearched] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const requestId = useRef(0)
@@ -35,6 +44,7 @@ function App() {
         setSlots(data.map((result, i) => ({ key: i, faceA: result, faceB: null, flipped: false })))
       })
       .catch(() => {})
+      .finally(() => setIsInitialLoading(false))
   }, [])
 
   useEffect(() => () => timeouts.current.forEach(clearTimeout), [])
@@ -121,6 +131,16 @@ function App() {
           <p className="error">Couldn't complete that search: {errorMessage}</p>
         )}
 
+        {isInitialLoading && (
+          <div className="grid" aria-hidden="true">
+            {Array.from({ length: RESULT_COUNT }).map((_, i) => (
+              <div className="card" key={i}>
+                <div className="skeleton" />
+              </div>
+            ))}
+          </div>
+        )}
+
         {slots.length > 0 && (
           <div className="grid">
             {slots.map((slot) => {
@@ -131,12 +151,12 @@ function App() {
                     <div className={`flip-inner ${slot.flipped ? 'is-flipped' : ''}`}>
                       <div className="flip-face flip-front">
                         {slot.faceA && (
-                          <img src={proxiedImageUrl(slot.faceA.image_url)} alt={slot.faceA.caption ?? ''} loading="lazy" />
+                          <img src={slot.faceA.image_url} data-src={slot.faceA.image_url} onError={handleImageError} alt={slot.faceA.caption ?? ''} loading="lazy" />
                         )}
                       </div>
                       <div className="flip-face flip-back">
                         {slot.faceB && (
-                          <img src={proxiedImageUrl(slot.faceB.image_url)} alt={slot.faceB.caption ?? ''} loading="lazy" />
+                          <img src={slot.faceB.image_url} data-src={slot.faceB.image_url} onError={handleImageError} alt={slot.faceB.caption ?? ''} loading="lazy" />
                         )}
                       </div>
                     </div>
