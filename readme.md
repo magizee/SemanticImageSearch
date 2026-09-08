@@ -38,22 +38,3 @@ api/requirements.txt      lean serving-only dependencies
 ```
 
 `SemanticImageSearchOverview_STUDENT.ipynb`, `makingCaptionVectors.ipynb`, and `profile.ipynb` are early exploratory notebooks, kept for reference.
-
-## Running locally
-
-**Backend**
-```
-python3 -m venv venv && source venv/bin/activate
-pip install -r api/requirements.txt
-uvicorn api.main:app --reload
-```
-
-**Frontend**
-```
-cd frontend
-npm install
-npm run dev
-```
-Set `VITE_API_URL` in `frontend/.env` to point at the backend (defaults to `http://127.0.0.1:8000`).
-
-**Rebuilding the model / database from scratch** needs the full pipeline dependencies (`pip install -r requirements.txt`, includes `gensim`, `mygrad`, `mynn`) plus the MS COCO caption/ResNet data — see `train.py` and `build_database.py`.
