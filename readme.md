@@ -4,6 +4,8 @@ Search 82,612 MS COCO images by meaning instead of keywords — type "grassy fie
 
 **Live demo:** https://semantic-image-search-pied.vercel.app 
 
+This repository is adapted from a semantic image search project originally developed by my team through MIT Beaver Works Summer Institute (BWSI). I later revisited the project to complete the remaining setup and deploy it as a standalone web application. The original repository can be found here: https://github.com/magizee/cogworks-langproj
+
 ## How it works
 
 Captions and images are mapped into a shared 128-dimensional embedding space, so a piece of text and an image can be compared directly by cosine similarity.
